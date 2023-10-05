@@ -2,18 +2,18 @@
 {% include "header.html" %}
 
 <!-- Page Header-->
-<header class="masthead" style="background-image: url('{{post.img_url}}')">
+<header class="masthead" style="background-image: url('{{cafe.img_url}}')">
   <div class="container position-relative px-4 px-lg-5">
     <div class="row gx-4 gx-lg-5 justify-content-center">
       <div class="col-md-10 col-lg-8 col-xl-7">
         <div class="post-heading">
-          <h1>{{ post.title }}</h1>
-          <h2 class="subheading">{{ post.subtitle }}</h2>
+          <h1>{{ cafe.name }}</h1>
+          <h2 class="subheading">{{ cafe.summary }}</h2>
           <span class="meta"
             >Posted by
             <!-- Changed from post.contributor -->
-            <a href="#">{{ post.author.name }}</a>
-            on {{ post.date }}
+            <a href="#">{{ cafe.contributor.name }}</a>
+            on {{ cafe.date }}
           </span>
         </div>
       </div>
@@ -26,14 +26,14 @@
   <div class="container px-4 px-lg-5">
     <div class="row gx-4 gx-lg-5 justify-content-center">
       <div class="col-md-10 col-lg-8 col-xl-7">
-        {{ post.body|safe }}
+        {{ cafe.body|safe }}
         <!--Only show Edit Post button if user id is 1 (admin user) -->
         {% if current_user.id == 1 %}
         <div class="d-flex justify-content-end mb-4">
           <a
             class="btn btn-primary float-right"
-            href="{{url_for('edit_post', post_id=post.id)}}"
-            >Edit Post</a
+            href="{{url_for('edit_cafe', cafe_id=cafe.id)}}"
+            >Edit Cafe</a
           >
         </div>
         {% endif %}
@@ -48,7 +48,7 @@
         <div class="comment">
           <ul class="commentList">
             <!-- Show all comments -->
-            {% for comment in post.comments: %}
+            {% for comment in cafe.comments: %}
             <li>
               <div class="commenterImage">
                 <img

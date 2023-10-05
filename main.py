@@ -38,7 +38,7 @@ gravatar = Gravatar(app,
                     base_url=None)
 
 # CONNECT TO DB
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DB_URI", "sqlite:///cafes.db")
+app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///cafes.db"
 db = SQLAlchemy()
 db.init_app(app)
 
@@ -222,12 +222,13 @@ def add_new_cafe():
             body=form.body.data,
             img_url=form.img_url.data,
             contributor=current_user,
-            date=date.today().strftime("%B %d, %Y")
+            date=date.today().strftime("%B %d, %Y"),
+            rating=form.rating.data
         )
         db.session.add(new_cafe)
         db.session.commit()
         return redirect(url_for("cafelist"))
-    return render_template("make-cafe.html", form=form, current_user=current_user)
+    return render_template("add-cafe.html", form=form, current_user=current_user)
 
 
 # Used a decorator so only an admin user can edit a post
@@ -237,11 +238,12 @@ def add_new_cafe():
 def edit_cafe(cafe_id):
     cafe = db.get_or_404(Cafe, cafe_id)
     edit_form = CreateCafeForm(
-        title=cafe.name,
-        subtitle=cafe.summary,
+        name=cafe.name,
+        summary=cafe.summary,
         img_url=cafe.img_url,
         author=cafe.contributor,
-        body=cafe.body
+        body=cafe.body,
+        rating=cafe.rating
     )
     if edit_form.validate_on_submit():
         cafe.name = edit_form.name.data
@@ -249,9 +251,10 @@ def edit_cafe(cafe_id):
         cafe.img_url = edit_form.img_url.data
         cafe.contributor = current_user
         cafe.body = edit_form.body.data
+        rating = edit_form.rating.data
         db.session.commit()
         return redirect(url_for("show_cafe", cafe_id=cafe.id))
-    return render_template("make-cafe.html", form=edit_form, is_edit=True, current_user=current_user)
+    return render_template("add-cafe.html", form=edit_form, is_edit=True, current_user=current_user)
 
 
 # Used a decorator so only an admin user can delete a post
