@@ -49,6 +49,7 @@ class Cafe(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     # Create Foreign Key, "users.id" the users refers to the tablename of User.
     contributor_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    contributor_name = db.Column(db.String(100))  # Add contributor_name field
     # Create reference to the User object. The "cafes" refers to the cafes property in the User class.
     contributor = relationship("User", back_populates="cafes")
     name = db.Column(db.String(250), unique=True, nullable=False)
@@ -112,7 +113,7 @@ def user_can_edit_cafe(func):
         cafe = Cafe.query.get_or_404(cafe_id)
 
         # Check if the current user is the contributor of the cafe post
-        if current_user != cafe.contributor:
+        if current_user != cafe.contributor or current_user.id != 1:
             abort(403)  # Forbidden, as the user is not the contributor
 
         return func(cafe_id)
@@ -216,12 +217,13 @@ def show_cafe(cafe_id):
 def add_new_cafe():
     form = CreateCafeForm()
     if form.validate_on_submit():
+        contributor_name = form.contributor_name.data or current_user.name  # Set default if None
         new_cafe = Cafe(
             name=form.name.data,
             summary=form.summary.data,
             body=form.body.data,
             img_url=form.img_url.data,
-            contributor=current_user,
+            contributor_name=contributor_name,
             date=date.today().strftime("%B %d, %Y"),
             rating=form.rating.data
         )
@@ -234,7 +236,6 @@ def add_new_cafe():
 # Used a decorator so only an admin user can edit a post
 @app.route("/edit-cafe/<int:cafe_id>", methods=["GET", "POST"])
 @login_required
-@user_can_edit_cafe
 def edit_cafe(cafe_id):
     cafe = db.get_or_404(Cafe, cafe_id)
     edit_form = CreateCafeForm(
@@ -246,12 +247,13 @@ def edit_cafe(cafe_id):
         rating=cafe.rating
     )
     if edit_form.validate_on_submit():
+        contributor_name = edit_form.contributor_name.data or current_user.name  # Set default if None
         cafe.name = edit_form.name.data
         cafe.summary = edit_form.summary.data
         cafe.img_url = edit_form.img_url.data
-        cafe.contributor = current_user
+        cafe.contributor_name = contributor_name  # Update contributor's name
         cafe.body = edit_form.body.data
-        rating = edit_form.rating.data
+        cafe.rating = edit_form.rating.data
         db.session.commit()
         return redirect(url_for("show_cafe", cafe_id=cafe.id))
     return render_template("add-cafe.html", form=edit_form, is_edit=True, current_user=current_user)

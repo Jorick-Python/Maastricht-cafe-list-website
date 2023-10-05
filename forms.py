@@ -13,6 +13,7 @@ class CreateCafeForm(FlaskForm):
                                       NumberRange(min=1, max=10, message='Rating must be between 1 and 10.')])
     body = CKEditorField("Why did you give the cafe this rating? Be as specific as you like :)", validators=[DataRequired()])
     img_url = StringField("Add an image of the cafe (optional)", validators=[URL()])
+    contributor_name = StringField("Contributor's Name ***ONLY FILL IN WHEN ADDING FOR SOMEONE ELSE***")  # Add a field for contributor's name
     submit = SubmitField("Submit Post")
 
 
