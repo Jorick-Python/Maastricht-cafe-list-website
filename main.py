@@ -1,14 +1,15 @@
+import smtplib
 from datetime import date
 from flask import Flask, abort, render_template, redirect, url_for, flash, request
 from flask_bootstrap import Bootstrap5
 from flask_ckeditor import CKEditor
 from flask_gravatar import Gravatar
-from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user
+from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user, login_required
 from flask_sqlalchemy import SQLAlchemy
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import relationship
-from forms import CreatePostForm, RegisterForm, LoginForm, CommentForm
+from forms import CreateCafeForm, RegisterForm, LoginForm, CommentForm
 import os
 
 app = Flask(__name__)
@@ -37,26 +38,27 @@ gravatar = Gravatar(app,
                     base_url=None)
 
 # CONNECT TO DB
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DB_URI", "sqlite:///posts.db")
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DB_URI", "sqlite:///cafes.db")
 db = SQLAlchemy()
 db.init_app(app)
 
 
 # CONFIGURE TABLES
-class BlogPost(db.Model):
-    __tablename__ = "blog_posts"
+class Cafe(db.Model):
+    __tablename__ = "cafelist"
     id = db.Column(db.Integer, primary_key=True)
     # Create Foreign Key, "users.id" the users refers to the tablename of User.
-    author_id = db.Column(db.Integer, db.ForeignKey("users.id"))
-    # Create reference to the User object. The "posts" refers to the posts property in the User class.
-    author = relationship("User", back_populates="posts")
-    title = db.Column(db.String(250), unique=True, nullable=False)
-    subtitle = db.Column(db.String(250), nullable=False)
+    contributor_id = db.Column(db.Integer, db.ForeignKey("users.id"))
+    # Create reference to the User object. The "cafes" refers to the cafes property in the User class.
+    contributor = relationship("User", back_populates="cafes")
+    name = db.Column(db.String(250), unique=True, nullable=False)
+    summary = db.Column(db.String(250), nullable=False)
     date = db.Column(db.String(250), nullable=False)
     body = db.Column(db.Text, nullable=False)
-    img_url = db.Column(db.String(250), nullable=False)
+    img_url = db.Column(db.String(250))
+    rating = db.Column(db.Integer, nullable=False)
     # Parent relationship to the comments
-    comments = relationship("Comment", back_populates="parent_post")
+    comments = relationship("Comment", back_populates="parent_cafe")
 
 
 # Create a User table for all your registered users
@@ -66,14 +68,14 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(100), unique=True)
     password = db.Column(db.String(100))
     name = db.Column(db.String(100))
-    # This will act like a list of BlogPost objects attached to each User.
-    # The "author" refers to the author property in the BlogPost class.
-    posts = relationship("BlogPost", back_populates="author")
+    # This will act like a list of Café objects attached to each User.
+    # The "contributor" refers to the contributor property in the Cafe class.
+    cafes = relationship("Cafe", back_populates="contributor")
     # Parent relationship: "comment_author" refers to the comment_author property in the Comment class.
     comments = relationship("Comment", back_populates="comment_author")
 
 
-# Create a table for the comments on the blog posts
+# Create a table for the comments on the blog cafes
 class Comment(db.Model):
     __tablename__ = "comments"
     id = db.Column(db.Integer, primary_key=True)
@@ -83,8 +85,8 @@ class Comment(db.Model):
     author_id = db.Column(db.Integer, db.ForeignKey("users.id"))
     comment_author = relationship("User", back_populates="comments")
     # Child Relationship to the BlogPosts
-    post_id = db.Column(db.Integer, db.ForeignKey("blog_posts.id"))
-    parent_post = relationship("BlogPost", back_populates="comments")
+    cafe_id = db.Column(db.Integer, db.ForeignKey("cafelist.id"))
+    parent_cafe = relationship("Cafe", back_populates="comments")
 
 
 with app.app_context():
@@ -100,6 +102,20 @@ def admin_only(f):
             return abort(403)
         # Otherwise continue with the route function
         return f(*args, **kwargs)
+
+    return decorated_function
+
+
+def user_can_edit_cafe(func):
+    @wraps(func)
+    def decorated_function(cafe_id):
+        cafe = Cafe.query.get_or_404(cafe_id)
+
+        # Check if the current user is the contributor of the cafe post
+        if current_user != cafe.contributor:
+            abort(403)  # Forbidden, as the user is not the contributor
+
+        return func(cafe_id)
 
     return decorated_function
 
@@ -132,7 +148,7 @@ def register():
         db.session.commit()
         # This line will authenticate the user with Flask-Login
         login_user(new_user)
-        return redirect(url_for("get_all_posts"))
+        return redirect(url_for("cafelist"))
     return render_template("register.html", form=form, current_user=current_user)
 
 
@@ -154,7 +170,7 @@ def login():
             return redirect(url_for('login'))
         else:
             login_user(user)
-            return redirect(url_for('get_all_posts'))
+            return redirect(url_for('cafelist'))
 
     return render_template("login.html", form=form, current_user=current_user)
 
@@ -162,23 +178,23 @@ def login():
 @app.route('/logout')
 def logout():
     logout_user()
-    return redirect(url_for('get_all_posts'))
+    return redirect(url_for('cafelist'))
 
 
 @app.route('/')
-def get_all_posts():
-    result = db.session.execute(db.select(BlogPost))
-    posts = result.scalars().all()
-    return render_template("index.html", all_posts=posts, current_user=current_user)
+def cafelist():
+    result = db.session.execute(db.select(Cafe))
+    cafes = result.scalars().all()
+    return render_template("index.html", all_cafes=cafes, current_user=current_user)
 
 
-# Add a POST method to be able to post comments
-@app.route("/post/<int:post_id>", methods=["GET", "POST"])
-def show_post(post_id):
-    requested_post = db.get_or_404(BlogPost, post_id)
+# Added a POST method to be able to post comments
+@app.route("/cafe/<int:cafe_id>", methods=["GET", "POST"])
+def show_cafe(cafe_id):
+    requested_cafe = db.get_or_404(Cafe, cafe_id)
     # Add the CommentForm to the route
     comment_form = CommentForm()
-    # Only allow logged-in users to comment on posts
+    # Only allow logged-in users to comment on cafes
     if comment_form.validate_on_submit():
         if not current_user.is_authenticated:
             flash("You need to login or register to comment.")
@@ -187,97 +203,95 @@ def show_post(post_id):
         new_comment = Comment(
             text=comment_form.comment_text.data,
             comment_author=current_user,
-            parent_post=requested_post
+            parent_cafe=requested_cafe
         )
         db.session.add(new_comment)
         db.session.commit()
-    return render_template("post.html", post=requested_post, current_user=current_user, form=comment_form)
+    return render_template("cafe.html", cafe=requested_cafe, current_user=current_user, form=comment_form)
 
 
-# Use a decorator so only an admin user can create new posts
-@app.route("/new-post", methods=["GET", "POST"])
-@admin_only
-def add_new_post():
-    form = CreatePostForm()
+# Used a decorator so only an admin user can create new cafes
+@app.route("/new-cafe", methods=["GET", "POST"])
+@login_required
+def add_new_cafe():
+    form = CreateCafeForm()
     if form.validate_on_submit():
-        new_post = BlogPost(
-            title=form.title.data,
-            subtitle=form.subtitle.data,
+        new_cafe = Cafe(
+            name=form.name.data,
+            summary=form.summary.data,
             body=form.body.data,
             img_url=form.img_url.data,
-            author=current_user,
+            contributor=current_user,
             date=date.today().strftime("%B %d, %Y")
         )
-        db.session.add(new_post)
+        db.session.add(new_cafe)
         db.session.commit()
-        return redirect(url_for("get_all_posts"))
-    return render_template("make-post.html", form=form, current_user=current_user)
+        return redirect(url_for("cafelist"))
+    return render_template("make-cafe.html", form=form, current_user=current_user)
 
 
-# Use a decorator so only an admin user can edit a post
-@app.route("/edit-post/<int:post_id>", methods=["GET", "POST"])
-def edit_post(post_id):
-    post = db.get_or_404(BlogPost, post_id)
-    edit_form = CreatePostForm(
-        title=post.title,
-        subtitle=post.subtitle,
-        img_url=post.img_url,
-        author=post.author,
-        body=post.body
+# Used a decorator so only an admin user can edit a post
+@app.route("/edit-cafe/<int:cafe_id>", methods=["GET", "POST"])
+@login_required
+@user_can_edit_cafe
+def edit_cafe(cafe_id):
+    cafe = db.get_or_404(Cafe, cafe_id)
+    edit_form = CreateCafeForm(
+        title=cafe.name,
+        subtitle=cafe.summary,
+        img_url=cafe.img_url,
+        author=cafe.contributor,
+        body=cafe.body
     )
     if edit_form.validate_on_submit():
-        post.title = edit_form.title.data
-        post.subtitle = edit_form.subtitle.data
-        post.img_url = edit_form.img_url.data
-        post.author = current_user
-        post.body = edit_form.body.data
+        cafe.name = edit_form.name.data
+        cafe.summary = edit_form.summary.data
+        cafe.img_url = edit_form.img_url.data
+        cafe.contributor = current_user
+        cafe.body = edit_form.body.data
         db.session.commit()
-        return redirect(url_for("show_post", post_id=post.id))
-    return render_template("make-post.html", form=edit_form, is_edit=True, current_user=current_user)
+        return redirect(url_for("show_cafe", cafe_id=cafe.id))
+    return render_template("make-cafe.html", form=edit_form, is_edit=True, current_user=current_user)
 
 
-# Use a decorator so only an admin user can delete a post
-@app.route("/delete/<int:post_id>")
+# Used a decorator so only an admin user can delete a post
+@app.route("/delete/<int:cafe_id>")
 @admin_only
-def delete_post(post_id):
-    post_to_delete = db.get_or_404(BlogPost, post_id)
-    db.session.delete(post_to_delete)
+def delete_cafe(cafe_id):
+    cafe_to_delete = db.get_or_404(Cafe, cafe_id)
+    db.session.delete(cafe_to_delete)
     db.session.commit()
-    return redirect(url_for('get_all_posts'))
+    return redirect(url_for('cafelist'))
 
 
-@app.route("/about")
-def about():
-    return render_template("about.html", current_user=current_user)
+about = False
+if about:
+    @app.route("/about")
+    def about():
+        return render_template("about.html", current_user=current_user)
+
+MAIL_ADDRESS = os.environ.get("EMAIL_KEY")
+MAIL_APP_PW = os.environ.get("PASSWORD_KEY")
 
 
 @app.route("/contact", methods=["GET", "POST"])
 def contact():
-    return render_template("contact.html", current_user=current_user)
+    if request.method == "POST":
+        data = request.form
+        send_email(data["name"], data["email"], data["phone"], data["message"])
+        return render_template("contact.html", msg_sent=True)
+    return render_template("contact.html", msg_sent=False)
 
-# Optional: You can inclue the email sending code from Day 60:
-# DON'T put your email and password here directly! The code will be visible when you upload to Github.
-# Use environment variables instead (Day 35)
 
-# MAIL_ADDRESS = os.environ.get("EMAIL_KEY")
-# MAIL_APP_PW = os.environ.get("PASSWORD_KEY")
-
-# @app.route("/contact", methods=["GET", "POST"])
-# def contact():
-#     if request.method == "POST":
-#         data = request.form
-#         send_email(data["name"], data["email"], data["phone"], data["message"])
-#         return render_template("contact.html", msg_sent=True)
-#     return render_template("contact.html", msg_sent=False)
 #
 #
-# def send_email(name, email, phone, message):
-#     email_message = f"Subject:New Message\n\nName: {name}\nEmail: {email}\nPhone: {phone}\nMessage:{message}"
-#     with smtplib.SMTP("smtp.gmail.com") as connection:
-#         connection.starttls()
-#         connection.login(MAIL_ADDRESS, MAIL_APP_PW)
-#         connection.sendmail(MAIL_ADDRESS, MAIL_APP_PW, email_message)
+def send_email(name, email, phone, message):
+    email_message = f"Subject:New Message\n\nName: {name}\nEmail: {email}\nPhone: {phone}\nMessage:{message}"
+    with smtplib.SMTP("smtp.gmail.com") as connection:
+        connection.starttls()
+        connection.login(MAIL_ADDRESS, MAIL_APP_PW)
+        connection.sendmail(MAIL_ADDRESS, MAIL_APP_PW, email_message)
 
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(debug=True, port=5001)
