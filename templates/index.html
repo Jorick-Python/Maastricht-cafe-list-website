@@ -10,7 +10,7 @@
       <div class="col-md-10 col-lg-8 col-xl-7">
         <div class="site-heading">
           <h1>Maastricht Café Overview</h1>
-          <span class="subheading">A collection of caffeine goodness.</span>
+          <span class="subheading">A collection of caffeine goodness by students, for students.</span>
         </div>
       </div>
     </div>
@@ -25,12 +25,12 @@
       <div class="post-preview">
         <a href="{{ url_for('show_cafe', cafe_id=cafe.id) }}">
           <h2 class="post-title">{{ cafe.name }}</h2>
-          <h3 class="post-subtitle">{{ cafe.summary }}</h3>
+          <h3 class="post-subtitle">{{ cafe.summary }} - <strong>{{cafe.rating}}/10</strong></h3>
         </a>
         <p class="post-meta">
           Posted by
           <!-- post.contributor.name is now a User object -->
-          <a href="#">{{cafe.contributor.name}}</a>
+          <a href="#">{{cafe.contributor_name}}</a>
           on {{cafe.date}}
           <!-- Only show delete button if user id is 1 (admin user) -->
           {% if current_user.id == 1: %}
